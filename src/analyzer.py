@@ -3,10 +3,15 @@
 
 import numpy as np
 import scipy.stats as sss
-from . import simulation_wf as wfs
 import pickle as pic
 import pandas as pd
-from . import hmm
+
+try:
+    from . import simulation_wf as wfs
+    from . import hmm
+except ImportError:
+    import simulation_wf as wfs
+    import hmm
 
 class Analyzer:
     """ rewriting of the Analyzer class"""

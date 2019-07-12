@@ -3,13 +3,17 @@
 import numpy as np
 import scipy.stats as sss
 import scipy.special as ss
-from . import rational_fraction as rf
 import itertools as itt
 import numbers as nb
 import time
 import argparse as arg
 import pickle as pic
 import os
+
+try:
+    from . import rational_fraction as rf
+except ImportError:
+    import rational_fraction as rf
 
 class MomentsCalculator:
     """ class implementing the calculation of moments using various methods """

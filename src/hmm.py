@@ -5,9 +5,14 @@ import itertools as it
 import scipy.stats as sss
 import scipy.special as ss
 import warnings as war
-from . import moment_approx as dm
-from . import rational_fraction as rf
 import time as tm
+try:
+    from . import moment_approx as dm
+    from . import rational_fraction as rf
+except ImportError:
+    import moment_approx as dm
+    import rational_fraction as rf
+
 
 class HMM:
     def __init__(self, times, model = 'spikedbeta', init = 'cunif',
