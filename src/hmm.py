@@ -5,14 +5,9 @@ import itertools as it
 import scipy.stats as sss
 import scipy.special as ss
 import warnings as war
+import moment_approx as dm
+import rational_fraction as rf
 import time as tm
-try:
-    from . import moment_approx as dm
-    from . import rational_fraction as rf
-except ImportError:
-    import moment_approx as dm
-    import rational_fraction as rf
-
 
 class HMM:
     def __init__(self, times, model = 'spikedbeta', init = 'cunif',
@@ -67,6 +62,8 @@ class HMM:
         elif model == 'beta':
             return ['N', 's', 'h']
         elif model == 'spikedbeta':
+            return ['N', 's', 'h']
+        elif model == 'spikedgauss':
             return ['N', 's', 'h']
         else:
             raise NotImplementedError(model, ' not implemented')
@@ -189,6 +186,14 @@ class HMM:
 
             self.trans_cont_dens = density
             self.trans_cont_supp = np.array([[0.00001, 0.99999]])
+            self.trans_disc_prob = proba
+            self.trans_disc_supp = np.array([0, 1])
+        elif model == 'spikedgauss':
+            density = self._spikedgauss_density
+            proba = self._spikedgauss_proba
+
+            self.trans_cont_dens = density
+            self.trans_cont_supp = np.array([[0, 1]])
             self.trans_disc_prob = proba
             self.trans_disc_supp = np.array([0, 1])
         else:
@@ -1085,9 +1090,19 @@ class HMM:
         dom = h[np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
 
         # computing moments
-        mom = dm.moments(t, x0, size, sel, dom)
-        mean = mom[0]
-        stdev = np.sqrt(mom[1])
+        mom_cal = dm.MomentsCalculator(x0 = x[0, :, 0, 0, 0], N = N, s = s,
+                                         h = h, rec = 'Tay2')
+        mom_cal.compute_moments(gen = max(delta_t), store = True)
+
+        moments_shape = np.broadcast(t, x0, x1, size, sel, dom).shape
+        moments_shape = (2, *moments_shape)
+        moments = np.empty(shape = moments_shape)
+        for i, time in enumerate(delta_t):
+            mom = mom_cal.moments[:, time, :, np.newaxis, :, :, :, 0, 0]
+            moments[:, i, ] = mom
+            
+        mean = moments[0]
+        stdev = np.sqrt(moments[1])
 
         # the shape of the array we return
         shape_out = (*x0.shape[:2], x1.shape[2], *x0.shape[3:],)
@@ -1137,9 +1152,19 @@ class HMM:
         dom = h[np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
 
         # computing moments
-        mom = dm.moments(t, x0, size, sel, dom)
-        mean = mom[0]
-        stdev = np.sqrt(mom[1])
+        mom_cal = dm.MomentsCalculator(x0 = x[0, :, 0, 0, 0], N = N, s = s,
+                                         h = h, rec = 'Tay2')
+        mom_cal.compute_moments(gen = max(delta_t), store = True)
+
+        moments_shape = np.broadcast(t, x0, x1, size, sel, dom).shape
+        moments_shape = (2, *moments_shape)
+        moments = np.empty(shape = moments_shape)
+        for i, time in enumerate(delta_t):
+            mom = mom_cal.moments[:, time, :, np.newaxis, :, :, :, 0, 0]
+            moments[:, i, ] = mom
+            
+        mean = moments[0]
+        stdev = np.sqrt(moments[1])
 
         # muting some numpy warnings
         with np.errstate(divide = 'ignore', invalid = 'ignore'):
@@ -1148,6 +1173,129 @@ class HMM:
         # if we are absorbed or if we want to go outside [0, 1] return 0
         mask = (x0 == 0) + (x0 == 1) + (x1 < 0) + (x1 > 1)
         out_array[mask] = 0
+
+        return out_array
+
+    @staticmethod
+    def _spikedgauss_density(delta_t, x, xprime, N, s, h = np.array([0.5])):
+        # giving all parameters broadcasting compatible shapes
+        t = delta_t[:, np.newaxis, np.newaxis,
+                    np.newaxis, np.newaxis, np.newaxis]
+        x0 = x[:, :, np.newaxis, ]
+        x1 = xprime[:, np.newaxis, ]
+
+        size = N[np.newaxis, np.newaxis, np.newaxis, :, np.newaxis, np.newaxis]
+        sel = s[np.newaxis, np.newaxis, np.newaxis, np.newaxis, :, np.newaxis]
+        dom = h[np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
+
+        # computing moments
+        mom_cal = dm.MomentsCalculator(x0 = x[0, :, 0, 0, 0], N = N, s = s,
+                                         h = h, rec = 'Tay2')
+        mom_cal.compute_moments(gen = max(delta_t), store = True)
+        mom_cal.compute_fixations(gen = max(delta_t), store = True,
+                                  app = 'beta_tataru')
+        moments_shape = np.broadcast(t, x0, x1, size, sel, dom).shape
+        moments_shape = (2, *moments_shape)
+        moments = np.empty(shape = moments_shape)
+        fixations = np.empty(shape = moments_shape)
+        for i, time in enumerate(delta_t):
+            mom = mom_cal.moments[:, time, :, np.newaxis, :, :, :, 0, 0]
+            fix = mom_cal.fix_proba[:, time, :, np.newaxis, :, :, :, 0, 0]
+            moments[:, i, ] = mom
+            fixations[:, i, ] = fix
+
+        mean = moments[0]
+        var = moments[1]
+        p0 = fixations[0]
+        p1 = fixations[1]
+
+        del moments
+        del fixations
+
+        scaling = (1 - p1 - p0)
+
+        del p0
+
+        cond_var = var + mean ** 2 - p1
+
+        del var
+        
+        cond_mean = mean - p1
+        
+        del mean
+        del p1
+        
+        with np.errstate(invalid = 'ignore', divide = 'ignore'):
+            cond_mean /= scaling
+            cond_var /= scaling
+
+        cond_mean[scaling == 0] = 0
+        cond_var[scaling == 0] = 0
+            
+        cond_var -= cond_mean ** 2
+
+        with np.errstate(invalid = 'ignore', divide = 'ignore'):
+            out_array = sss.norm.logpdf(x = x1, loc = cond_mean,
+                                        scale = np.sqrt(cond_var))
+            out_array += np.log(scaling)
+        out_array = np.exp(out_array)
+
+        out_array[scaling == 0] = 0
+
+        del scaling
+
+        # if we are absorbed or if we want to go outside [0, 1] return 0
+        mask = (x0 == 0) + (x0 == 1) + (x1 < 0) + (x1 > 1)
+        out_array[mask] = 0
+        
+        del mask
+
+        # if there is some approximation errors, return 0 (the np.zeros
+        # is here only to fit shapes
+        mask = (cond_var == 0) + np.zeros(x1.shape, dtype = bool)
+        out_array[mask] = 0
+        return out_array
+
+    @staticmethod
+    def _spikedgauss_proba(delta_t, x, xprime, N, s, h = np.array([0.5])):
+        # giving all parameters broadcasting compatible shapes
+        t = delta_t[:, np.newaxis, np.newaxis,
+                    np.newaxis, np.newaxis, np.newaxis]
+        x0 = x[:, :, np.newaxis, ]
+        x1 = xprime[:, np.newaxis, ]
+
+        size = N[np.newaxis, np.newaxis, np.newaxis, :, np.newaxis, np.newaxis]
+        sel = s[np.newaxis, np.newaxis, np.newaxis, np.newaxis, :, np.newaxis]
+        dom = h[np.newaxis, np.newaxis, np.newaxis, np.newaxis, np.newaxis, :]
+
+        # computing moments
+        mom_cal = dm.MomentsCalculator(x0 = x[0, :, 0, 0, 0], N = N, s = s,
+                                         h = h, rec = 'Tay2')
+        mom_cal.compute_moments(gen = max(delta_t), store = True)
+        mom_cal.compute_fixations(gen = max(delta_t), store = True,
+                                  app = 'beta_tataru')
+        moments_shape = np.broadcast(t, x0, x1, size, sel, dom).shape
+        moments_shape = (2, *moments_shape)
+        fixations = np.empty(shape = moments_shape)
+        for i, time in enumerate(delta_t):
+            fix = mom_cal.fix_proba[:, time, :, np.newaxis, :, :, :, 0, 0]
+            fixations[:, i, ] = fix
+        
+        p0 = fixations[0]
+        p1 = fixations[1]
+
+        del fixations
+
+        # the shape of the array we return
+        shape_out = (*x0.shape[:2], x1.shape[2], *x0.shape[3:], )
+
+        out_array = np.full(shape = shape_out, fill_value = np.nan)
+
+        mask = (x1 == 0) + np.zeros(x0.shape, dtype = bool)
+        out_array[mask] = p0[mask]
+        
+        mask = (x1 == 1) + np.zeros(x0.shape, dtype = bool)
+        out_array[mask] = p1[mask]
 
         return out_array
 
