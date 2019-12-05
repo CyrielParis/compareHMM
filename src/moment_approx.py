@@ -12,7 +12,7 @@ import os
 
 try:
     from . import rational_fraction as rf
-except ImportError:
+except (ImportError, SystemError):
     import rational_fraction as rf
 
 class MomentsCalculator:
