@@ -15,7 +15,7 @@ def main(N, CHR, times, infile, outfile):
         df = df.loc[(df.CHR == CHR)]
         namefile = 'CHR_{CHR}_'.format(CHR = CHR) + namefile
     rd = rda.RDA()
-    rd.build_hmm('wrightfisher', 'dunif',
+    rd.build_hmm('spikedbeta', 'cunif',
                  srange = np.unique(np.hstack((
                      np.linspace(-1, 0, 100),
                      np.linspace(0, 1, 100)))),
