@@ -80,6 +80,7 @@ You can also analyze simulations done with the simulator previously presented
 with the simulation script, replacing all simulation related arguments by
 the option --input_file. For example, given your got simulations stored with
 the pickle format in the file my_simulations.pic, you can call :
+
 python3 run_analyzer.py --model_list spikedbeta beta gauss --init_list cunif
 --input_file my_simulations.pic --output_file simulations_analyzed
 --srange -0.1 0 0.1 0.2 0.5 1
