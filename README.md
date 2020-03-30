@@ -55,6 +55,35 @@ If you need to load a previously stored object, use the load method :
 
 ## Run an analyze on simulations
 
+To run an analyze on simulations, you can use the script run_analyze.py script
+by launching it in command line mode. If you need more help with the command,
+you can run the script with the help option : python3 run_analyzer.py --help
+
+To run simulations and analyze it run the script using corresponding arguments.
+
+python3 run_analyzer.py --freq 0.5 --popSize 100 --ssim 0.1 --nsim 10 --gen 30
+-t 0 10 25 30 --ssize 30 20 10 50 --model_list spikedbeta beta gauss
+--init_list cunif --output_file simulations_analyzed
+--srange -0.1 0 0.1 0.2 0.5 1
+
+This command will simulate a 10 Wright-Fisher process starting from an allele
+frequency of 0.5, a haploid population size of 100, a selection parameter of
+0.1, for a total of 30 generations sampled at generations 0, 10, 25 and 30
+with corresponding sample sizes of 30, 20, 10 and 50. Then the program will
+analyze these simulations with transition models spikedbeta, beta and gauss
+assuming the initial distribution is uniform on [0, 1]. The likelihood is
+computed over the grid constituted of the points given to the srange argument
+(here -0.1, 0, 0.1, 0.5 and 1). The results of these analyzes will be stored
+in the simulations_analyzed.csv file
+
+You can also analyze simulations done with the simulator previously presented
+with the simulation script, replacing all simulation related arguments by
+the option --input_file. For example, given your got simulations stored with
+the pickle format in the file my_simulations.pic, you can call :
+python3 run_analyzer.py --model_list spikedbeta beta gauss --init_list cunif
+--input_file my_simulations.pic --output_file simulations_analyzed
+--srange -0.1 0 0.1 0.2 0.5 1
+
 ## Run an analyze on real data set
 
 ### Input format
